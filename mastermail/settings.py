@@ -162,6 +162,8 @@ class Settings:
         if "\\" in user:  # DOMAIN\user
             user = user.split("\\", 1)[1]
         host = smtp.get("host", "")
+        if not host or host.replace(".", "").isdigit() or host == "localhost":
+            return user  # an IP or localhost tells us nothing about the mail domain
         domain = host.split(".", 1)[1] if host.count(".") >= 2 else host
         return f"{user}@{domain}" if user and domain else user
 

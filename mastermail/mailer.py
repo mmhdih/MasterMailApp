@@ -120,9 +120,10 @@ def build_message(*, from_addr: str, from_name: str, to_addr: str, subject: str,
         msg["Reply-To"] = reply_to
     if bcc:
         msg["Bcc"] = bcc
-    msg.set_content(body)
+    # base64 keeps Persian text intact on servers without 8BITMIME support.
+    msg.set_content(body, cte="base64")
     if html_body:
-        msg.add_alternative(html_body, subtype="html")
+        msg.add_alternative(html_body, subtype="html", cte="base64")
     for path in attachments or []:
         ctype, _ = mimetypes.guess_type(path)
         maintype, subtype = (ctype or "application/octet-stream").split("/", 1)

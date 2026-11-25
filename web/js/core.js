@@ -160,7 +160,7 @@ const P = {
 };
 export function icon(name, size = 18, sw = 1.9) {
   const svg = h("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
-    "stroke-width": sw, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" });
+    "stroke-width": sw, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", "data-icon": name });
   svg.appendChild(h("path", { d: P[name] || P.info }));
   return svg;
 }
@@ -177,7 +177,8 @@ export function button(text, opts = {}) {
       try { await opts.onClick(e); } catch (err) { toast(err.message || String(err), "error"); }
       finally { clearTimeout(t); if (el.isConnected) { mount(el, ...prev); el.disabled = !!opts.disabled; } }
     } },
-  opts.icon ? icon(opts.icon, opts.size === "sm" ? 15 : 17) : null, text ? h("span", {}, text) : null);
+  opts.icon && !opts.iconEnd ? icon(opts.icon, opts.size === "sm" ? 15 : 17) : null, text ? h("span", {}, text) : null,
+  opts.icon && opts.iconEnd ? icon(opts.icon, opts.size === "sm" ? 15 : 17) : null);
   return el;
 }
 

@@ -35,9 +35,9 @@ def norm_key(text: object) -> str:
 
 def clean_email(value: object) -> str:
     text = to_ascii_digits(str(value or "")).strip().strip("<>").strip()
-    text = text.replace("mailto:", "").replace(" ", "")
+    text = text.replace("mailto:", "")
     # A cell can hold several addresses; keep them, separated by commas.
-    parts = [p for p in re.split(r"[;,،\s]+", text) if p]
+    parts = [p.strip("<>") for p in re.split(r"[;,،؛\s]+", text) if p.strip("<>")]
     return ", ".join(parts)
 
 

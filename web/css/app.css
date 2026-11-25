@@ -182,7 +182,9 @@ a { color: var(--accent); text-decoration: none; }
 .group-row.link:hover { background: var(--bg-hover); }
 .group-row .value { color: var(--label-2); }
 .row-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none; }
-.chev { color: var(--label-3); transform: scaleX(-1); }
+.chev { color: var(--label-3); }
+/* Directional icons are drawn for LTR; mirror them in RTL (forward points left, back points right). */
+:root[dir="rtl"] svg[data-icon="chevron"], :root[dir="rtl"] svg[data-icon="back"] { transform: scaleX(-1); }
 
 /* ---------- forms ---------- */
 .field { display: flex; flex-direction: column; gap: 6px; }

@@ -28,7 +28,12 @@ function parseIdsLocal(text) {
   return { count: seen.size, dup, bad };
 }
 
-function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+function debounce(fn, ms) {
+  let t, last;
+  const d = (...a) => { last = a; clearTimeout(t); t = setTimeout(() => { t = null; fn(...a); }, ms); };
+  d.now = () => { if (t) { clearTimeout(t); t = null; fn(...(last || [])); } };
+  return d;
+}
 
 // ===================================================================== list
 export function campaignsView(page) {
@@ -62,7 +67,13 @@ export function campaignView(page, id) {
   const body = h("div");
   mount(page, header, stepper, body);
 
-  const save = debounce((p) => patch(`/api/campaigns/${id}`, p).then((c) => { S.c = c; }).catch((e) => toast(e.message, "error")), 500);
+  // Changes made within the debounce window are merged, so a quick "next" never drops a typed name.
+  let pendingPatch = {};
+  const flush = debounce(() => {
+    const p = pendingPatch; pendingPatch = {};
+    patch(`/api/campaigns/${id}`, p).then((c) => { S.c = { ...c, ...pendingPatch }; }).catch((e) => toast(e.message, "error"));
+  }, 500);
+  const save = (p) => { pendingPatch = { ...pendingPatch, ...p }; flush(); };
 
   async function load() {
     S.c = await get(`/api/campaigns/${id}`);
@@ -89,7 +100,7 @@ export function campaignView(page, id) {
     return 4;
   }
   function goStep(i) {
-    S.step = i; save({ step: i });
+    S.step = i; save({ step: i }); flush.now();
     renderStepper(); renderStep();
     page.parentElement.scrollTop = 0;
   }
@@ -101,7 +112,7 @@ export function campaignView(page, id) {
   function footer(...items) {
     return h("div", { class: "wizard-foot" }, ...items);
   }
-  const nextBtn = (label = "ادامه", onClick) => button(label, { kind: "primary", icon: "chevron", onClick: onClick || (() => goStep(S.step + 1)) });
+  const nextBtn = (label = "ادامه", onClick) => button(label, { kind: "primary", icon: "chevron", iconEnd: true, onClick: onClick || (() => goStep(S.step + 1)) });
   const backBtn = () => button("مرحله قبل", { onClick: () => goStep(S.step - 1), busy: false });
 
   // ------------------------------------------------------------------ step 0
@@ -624,7 +635,7 @@ export function campaignView(page, id) {
               button("ویرایش", { kind: "sm plain", onClick: () => goStep(2), busy: false }), "bad"),
             item(att.ready && !att.missing_count, attLabel, att.mode === "none" ? "" : att.needs_split ? "فایل‌ها هنوز ساخته نشده‌اند." : att.missing_count ? `${num(att.missing_count)} گیرنده فایل ندارند.` : "همه فایل‌ها آماده‌اند.",
               button("ویرایش", { kind: "sm plain", onClick: () => goStep(3), busy: false }), att.ready ? "warn" : "bad"),
-            item(r.smtp_ready, derived.from_address || "حساب ایمیل", r.smtp_ready ? `از طریق ${store.state.settings.smtp.host}` : "رمز عبور ایمیل وارد نشده است.",
+            item(r.smtp_ready, derived.from_address ? h("span", { class: "ltr" }, derived.from_address) : "حساب ایمیل", r.smtp_ready ? `از طریق ${store.state.settings.smtp.host}` : "رمز عبور ایمیل وارد نشده است.",
               r.smtp_ready ? button("تست اتصال", { kind: "sm plain", onClick: async () => { const t = await post("/api/smtp/test"); toast(`اتصال برقرار است (${fa(t.ms)} میلی‌ثانیه)`, "ok"); } })
                 : button("تنظیم", { kind: "sm plain", onClick: () => window.mmGo("#/settings"), busy: false }), "bad"))),
         h("div", { class: "col", style: { gap: "16px" } },
@@ -657,7 +668,8 @@ export function campaignView(page, id) {
     renderStepper(); renderStep();
   }).catch((e) => mount(page, emptyState("warn", "کمپین باز نشد", e.message)));
   const off = on("campaign", (c) => { if (c.id === id && S.c && S.step !== 1 && S.step !== 4) get(`/api/campaigns/${id}`).then((x) => { S.c = x; }); });
-  return { destroy: () => { cleanup(); off(); } };
+  window.addEventListener("beforeunload", flush.now);
+  return { destroy: () => { flush.now(); cleanup(); off(); window.removeEventListener("beforeunload", flush.now); } };
 }
 
 function delayOptions(current) {
