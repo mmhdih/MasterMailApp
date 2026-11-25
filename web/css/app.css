@@ -426,3 +426,4 @@ mark.ph { background: rgba(255, 204, 0, .35); color: inherit; border-radius: 4px
   .grid-3, .grid-2 { grid-template-columns: 1fr; }
   .step span.t { display: none; }
 }
+.card .crawl-chooser { box-shadow: none; padding: 4px 0 0; background: transparent; }

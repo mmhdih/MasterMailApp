@@ -16,7 +16,7 @@ const NAV = [
   { section: "ابزارها", items: [
     { id: "crawler", label: "کراولر ایمیل", icon: "globe" },
     { id: "splitter", label: "جداساز اکسل", icon: "scissors" },
-    { id: "directory", label: "دفترچه فروشندگان", icon: "book", badge: () => store.state?.stats?.sellers },
+    { id: "directory", label: "دفترچه آدرس", icon: "book", badge: () => store.state?.stats?.sellers },
   ] },
   { section: null, items: [{ id: "settings", label: "تنظیمات", icon: "gear" }] },
 ];

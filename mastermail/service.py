@@ -37,6 +37,16 @@ class UserError(Exception):
 
 ATTACH_NONE, ATTACH_SPLIT, ATTACH_SHARED, ATTACH_FOLDER = "none", "split", "shared", "folder"
 
+CRAWL_SMART, CRAWL_FULL = "smart", "full"
+SMART_CRAWLS = ("new", "no_email", "stale")   # what smart mode still fetches from the panel
+
+
+def crawl_mode(payload: dict) -> str:
+    mode = (payload or {}).get("mode")
+    if mode in (CRAWL_SMART, CRAWL_FULL):
+        return mode
+    return CRAWL_FULL if (payload or {}).get("refresh") else CRAWL_SMART
+
 
 class Service:
     def __init__(self, settings: Settings | None = None, db: Database | None = None,
@@ -286,7 +296,7 @@ class Service:
             for r in rows
         ])
         folder = self.settings.workspace() / "Exports"
-        path = folder / f"sellers-{dt.datetime.now():%Y%m%d-%H%M%S}.xlsx"
+        path = folder / f"دفترچه آدرس {dt.datetime.now():%Y-%m-%d %H%M%S}.xlsx"
         write_table(path, table, "sellers", rtl=True)
         return {"path": str(path)}
 
@@ -296,19 +306,59 @@ class Service:
     def _crawl_config(self) -> CrawlConfig:
         return CrawlConfig.from_settings(self.settings.section("crawler"))
 
-    def _ids_to_crawl(self, ids: list[str], refresh: bool) -> tuple[list[str], dict[str, dict]]:
+    # -- address book: what do we already know? --------------------------
+    def book_status(self, ids: list[str]) -> tuple[dict[str, str], dict[str, dict]]:
+        """Classify each id against the address book.
+
+        fresh     saved with an email, newer than the validity period
+        stale     saved with an email, but older than the validity period
+        no_email  in the book, but no email was found last time
+        new       never seen
+        """
         cached = self.db.get_sellers(ids)
-        if refresh:
-            return ids, cached
         max_age = max(0, int(self.settings.section("crawler").get("cache_days", 30))) * 86400
         now = time.time()
-        todo = []
+        status: dict[str, str] = {}
         for sid in ids:
             rec = cached.get(sid)
-            fresh = rec and rec.get("email") and (max_age == 0 or now - (rec.get("updated_at") or 0) < max_age)
-            if not fresh:
-                todo.append(sid)
-        return todo, cached
+            if not rec:
+                status[sid] = "new"
+            elif not rec.get("email"):
+                status[sid] = "no_email"
+            elif max_age and now - (rec.get("updated_at") or 0) > max_age:
+                status[sid] = "stale"
+            else:
+                status[sid] = "fresh"
+        return status, cached
+
+    @staticmethod
+    def _plan(status: dict[str, str]) -> dict:
+        counts = {k: 0 for k in ("fresh", "provided", "stale", "no_email", "new")}
+        for s in status.values():
+            counts[s] = counts.get(s, 0) + 1
+        smart = sum(1 for s in status.values() if s in SMART_CRAWLS)
+        return {"total": len(status), **counts, "smart": smart, "full": len(status),
+                "cache_days": None}
+
+    def _ids_from_payload(self, payload: dict) -> list[str]:
+        if payload.get("file_id"):
+            info = self.inspect_file(payload)
+            col = payload.get("id_column") or info["detected"]["id"]
+            if not col:
+                raise UserError("ستون شناسه فروشنده در فایل پیدا نشد.")
+            table = read_table(str(self.file_path(payload["file_id"])), payload.get("sheet") or "")
+            ids = [normalise_id(cell_text(r.get(col))) for r in table.rows if cell_text(r.get(col))]
+        elif payload.get("text"):
+            ids = parse_ids(payload["text"]).ids
+        else:
+            ids = [normalise_id(i) for i in payload.get("ids", [])]
+        return list(dict.fromkeys(i for i in ids if i))
+
+    def crawl_plan(self, payload: dict) -> dict:
+        ids = self._ids_from_payload(payload)
+        plan = self._plan(self.book_status(ids)[0])
+        plan["cache_days"] = int(self.settings.section("crawler").get("cache_days", 30))
+        return plan
 
     def _ensure_no_crawl_running(self) -> None:
         if self.jobs.active("crawl"):
@@ -323,24 +373,19 @@ class Service:
 
     def start_crawl(self, payload: dict) -> dict:
         self._ensure_no_crawl_running()
-        ids = parse_ids(payload.get("text", "")).ids if payload.get("text") else [normalise_id(i) for i in payload.get("ids", [])]
-        if payload.get("file_id"):
-            info = self.inspect_file(payload)
-            col = payload.get("id_column") or info["detected"]["id"]
-            if not col:
-                raise UserError("ستون شناسه فروشنده در فایل پیدا نشد.")
-            table = read_table(str(self.file_path(payload["file_id"])), payload.get("sheet") or "")
-            ids = list(dict.fromkeys(normalise_id(cell_text(r.get(col))) for r in table.rows if cell_text(r.get(col))))
-        ids = [i for i in ids if i]
+        ids = self._ids_from_payload(payload)
         if not ids:
             raise UserError("هیچ شناسه فروشنده‌ای وارد نشده است.")
-        refresh = bool(payload.get("refresh"))
+        mode = crawl_mode(payload)
 
         def work(job: Job) -> dict:
-            todo, cached = self._ids_to_crawl(ids, refresh)
+            status, cached = self.book_status(ids)
+            todo = ids if mode == CRAWL_FULL else [i for i in ids if status[i] in SMART_CRAWLS]
             skipped = len(ids) - len(todo)
-            if skipped:
-                job.log("info", f"{skipped} فروشنده از قبل در دفترچه بودند و دوباره کراول نشدند.")
+            if mode == CRAWL_FULL:
+                job.log("info", f"کراول کامل: هر {len(ids)} فروشنده از نو از پنل خوانده می‌شوند.")
+            elif skipped:
+                job.log("info", f"کراول هوشمند: {skipped} فروشنده از دفترچه آدرس خوانده شد؛ {len(todo)} فروشنده کراول می‌شود.")
             for sid in ids:
                 if sid not in todo and sid in cached:
                     job.item({"kind": "crawl", "seller_id": sid, "status": "cached",
@@ -357,12 +402,13 @@ class Service:
             status = {r["seller_id"]: r["status"] for r in (summary.results if summary else [])}
             rows = [{"seller_id": i, "email": found.get(i, {}).get("email", ""), "name": found.get(i, {}).get("name", ""),
                      "status": status.get(i, "cached")} for i in ids]
-            return {"ids": ids, "rows": rows, "crawled": len(todo), "cached": skipped,
+            return {"ids": ids, "rows": rows, "crawled": len(todo), "cached": skipped, "mode": mode,
                     "ok": summary.ok if summary else 0, "partial": summary.partial if summary else 0,
                     "empty": summary.empty if summary else 0, "failed": summary.failed if summary else 0,
                     "export": export["path"]}
 
-        job = self.jobs.start("crawl", f"کراول {len(ids)} فروشنده", work, {"ids": len(ids)})
+        title = f"کراول کامل {len(ids)} فروشنده" if mode == CRAWL_FULL else f"کراول هوشمند {len(ids)} فروشنده"
+        job = self.jobs.start("crawl", title, work, {"ids": len(ids), "mode": mode})
         return job.snapshot()
 
     # ==================================================================
@@ -589,14 +635,37 @@ class Service:
         return self.get_campaign(cid)
 
     # -- step 2: crawl missing emails -----------------------------------
+    def _campaign_status(self, campaign: dict) -> dict[str, str]:
+        """Per active recipient: provided (from the file or typed by hand) or its address-book status."""
+        active = [r for r in campaign.get("recipients", []) if not r.get("excluded")]
+        book, _ = self.book_status([r["seller_id"] for r in active])
+        status = {}
+        for r in active:
+            origin = (r.get("origin") or {}).get("email", "")
+            if r.get("email") and origin in ("file", "manual"):
+                status[r["seller_id"]] = "provided"
+            elif r.get("email") and book[r["seller_id"]] in ("new", "no_email"):
+                status[r["seller_id"]] = "provided"  # email came from somewhere other than the panel
+            elif not r.get("email") and book[r["seller_id"]] in ("fresh", "stale"):
+                status[r["seller_id"]] = "new"        # book has it but the recipient row is empty: fetch again
+            else:
+                status[r["seller_id"]] = book[r["seller_id"]]
+        return status
+
+    def campaign_crawl_plan(self, cid: str) -> dict:
+        plan = self._plan(self._campaign_status(self._campaign(cid)))
+        plan["cache_days"] = int(self.settings.section("crawler").get("cache_days", 30))
+        return plan
+
     def crawl_campaign(self, cid: str, payload: dict) -> dict:
         self._ensure_no_crawl_running()
         campaign = self._campaign(cid)
-        refresh = bool(payload.get("refresh"))
-        targets = [r["seller_id"] for r in campaign["recipients"]
-                   if not r.get("excluded") and (refresh or not r.get("email") or not r.get("name"))]
+        mode = crawl_mode(payload)
+        refresh = mode == CRAWL_FULL
+        status = self._campaign_status(campaign)
+        targets = list(status) if refresh else [sid for sid, s in status.items() if s in SMART_CRAWLS]
         if not targets:
-            raise UserError("همه گیرندگان ایمیل دارند؛ نیازی به کراول نیست.")
+            raise UserError("ایمیل همه گیرندگان در دفترچه آدرس هست و نیازی به کراول نیست. برای خواندن دوباره از پنل، «کراول کامل از نو» را انتخاب کنید.")
 
         def on_result(result: CrawlResult) -> None:
             self._store_crawl(result)
@@ -612,6 +681,11 @@ class Service:
                     rec["crawl_message"] = result.message
 
         def work(job: Job) -> dict:
+            skipped = len(status) - len(targets)
+            if refresh:
+                job.log("info", f"کراول کامل: هر {len(targets)} گیرنده از نو از پنل خوانده می‌شوند.")
+            elif skipped:
+                job.log("info", f"کراول هوشمند: {skipped} گیرنده از دفترچه آدرس یا فایل پر شد؛ {len(targets)} فروشنده کراول می‌شود.")
             crawler = Crawler(self._crawl_config(), job, self.driver_factory, on_result=on_result)
             try:
                 summary = crawler.run(targets)
@@ -620,9 +694,12 @@ class Service:
             finally:
                 self._save(campaign)
             return {"crawled": len(targets), "ok": summary.ok, "partial": summary.partial,
-                    "empty": summary.empty, "failed": summary.failed}
+                    "empty": summary.empty, "failed": summary.failed, "mode": mode,
+                    "from_book": len(status) - len(targets)}
 
-        job = self.jobs.start("crawl", f"دریافت ایمیل {len(targets)} فروشنده", work, {"campaign": cid})
+        title = (f"کراول کامل {len(targets)} فروشنده" if refresh
+                 else f"کراول هوشمند {len(targets)} فروشنده")
+        job = self.jobs.start("crawl", title, work, {"campaign": cid, "mode": mode})
         return job.snapshot()
 
     # -- step 4: attachments ---------------------------------------------
@@ -993,7 +1070,7 @@ def _status_fa(status: str) -> str:
 
 
 def _origin_fa(origin: str) -> str:
-    return {"file": "فایل ورودی", "directory": "دفترچه فروشندگان", "crawl": "کراول پنل",
+    return {"file": "فایل ورودی", "directory": "دفترچه آدرس", "crawl": "کراول پنل",
             "manual": "ویرایش دستی"}.get(origin, "—")
 
 

@@ -60,14 +60,14 @@ export function homeView(page) {
     h("div", { class: "grid-4" },
       stat("ایمیل ارسال‌شده", stats.emails_sent, "send", "var(--accent)"),
       stat("کمپین‌ها", stats.campaigns, "sparkles", "var(--purple)"),
-      stat("فروشنده در دفترچه", stats.sellers, "book", "var(--orange)"),
+      stat("در دفترچه آدرس", stats.sellers, "book", "var(--orange)"),
       stat("دارای ایمیل", stats.sellers_with_email, "check", "var(--green)")),
 
     h("div", { class: "section-head" }, h("h3", {}, "ابزارهای سریع")),
     h("div", { class: "grid-3" },
       tile("کراولر ایمیل", "فهرست شناسه‌ها را بدهید و ایمیل و نام تجاری فروشنده‌ها را در قالب اکسل بگیرید.", "globe", "linear-gradient(160deg,#5AC8FA,#007AFF)", "#/crawler"),
       tile("جداساز اکسل", "یک فایل را بر اساس هر ستونی به فایل‌های جدا یا شیت‌های جدا تقسیم کنید.", "scissors", "linear-gradient(160deg,#FFB340,#FF9500)", "#/splitter"),
-      tile("دفترچه فروشندگان", "ایمیل‌هایی که قبلاً پیدا شده‌اند اینجا ذخیره‌اند؛ کراول تکراری لازم نیست.", "book", "linear-gradient(160deg,#C77DFF,#AF52DE)", "#/directory")),
+      tile("دفترچه آدرس", "همه ایمیل‌هایی که تا حالا پیدا شده‌اند اینجا ذخیره‌اند؛ کراول هوشمند فقط موارد جدید را از پنل می‌خواند.", "book", "linear-gradient(160deg,#C77DFF,#AF52DE)", "#/directory")),
 
     h("div", { class: "section-head" }, h("h3", {}, "کمپین‌های اخیر"), h("span", { class: "spacer" }),
       button("همه", { kind: "plain", onClick: () => window.mmGo("#/campaigns"), busy: false })),

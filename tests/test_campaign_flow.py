@@ -64,7 +64,8 @@ def test_end_to_end(env):
     svc.jobs.control(job["id"], "confirm-login")
     j = wait(svc, job)
     assert j.state == "done", j.error
-    assert j.result == {"crawled": 4, "ok": 2, "partial": 1, "empty": 1, "failed": 0}
+    assert {k: j.result[k] for k in ("crawled", "ok", "partial", "empty", "failed", "mode")} == \
+        {"crawled": 4, "ok": 2, "partial": 1, "empty": 1, "failed": 0, "mode": "smart"}
     c = svc.get_campaign(c["id"])
     emails = {r["seller_id"]: r["email"] for r in c["recipients"]}
     assert emails == {"1001": "ali@shop.ir", "1002": "sara@shop.ir", "1003": "", "1004": ""}
