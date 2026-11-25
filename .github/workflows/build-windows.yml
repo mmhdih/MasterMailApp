@@ -1,0 +1,85 @@
+name: Build Windows portable
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Publish a GitHub release for this version"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install openpyxl xlrd selenium python-docx keyring anthropic pytest
+      - name: Test
+        run: python -m pytest tests -q
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Version info
+        run: python packaging/make_version_info.py
+      - name: Build exe
+        run: pyinstaller --noconfirm --clean MasterMail.spec
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $out = & dist\MasterMail.exe --version | Out-String
+          Write-Host $out
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $v = python -c "import mastermail; print(mastermail.__version__)"
+          Rename-Item dist\MasterMail.exe "MasterMail-v$v-portable-x64.exe"
+          (Get-FileHash "dist\MasterMail-v$v-portable-x64.exe" -Algorithm SHA256).Hash | Out-File -Encoding ascii "dist\MasterMail-v$v-portable-x64.exe.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MasterMail-windows
+          path: dist/*
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MasterMail-windows
+          path: dist
+      - name: Tag
+        id: tag
+        run: echo "tag=v$(python3 -c 'import mastermail; print(mastermail.__version__)')" >> "$GITHUB_OUTPUT"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "مستر میل ${{ steps.tag.outputs.tag }}"
+          files: dist/*
+          body: |
+            فایل `MasterMail-…-portable-x64.exe` را دانلود و اجرا کنید؛ نصب لازم نیست.
+            پیش‌نیاز: Google Chrome (برای کراول) و Microsoft Edge WebView2 (روی ویندوز ۱۰ و ۱۱ از قبل نصب است).

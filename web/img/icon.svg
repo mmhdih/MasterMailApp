@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#4FA3FF"/>
+      <stop offset="0.45" stop-color="#2F6BFF"/>
+      <stop offset="1" stop-color="#6A3BE4"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.22" cy="0.12" r="0.75">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E7ECFF"/>
+    </linearGradient>
+    <linearGradient id="flap" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2F6BFF"/>
+      <stop offset="1" stop-color="#7A45EA"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE38A"/>
+      <stop offset="1" stop-color="#FFB224"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="26" stdDeviation="30" flood-color="#1B1F6B" flood-opacity="0.35"/>
+    </filter>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#7A3E00" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <!-- continuous-corner squircle -->
+  <path d="M512 0C908 0 1024 116 1024 512S908 1024 512 1024 0 908 0 512 116 0 512 0z" fill="url(#bg)"/>
+  <path d="M512 0C908 0 1024 116 1024 512S908 1024 512 1024 0 908 0 512 116 0 512 0z" fill="url(#glow)"/>
+  <!-- envelope -->
+  <g filter="url(#shadow)">
+    <rect x="206" y="318" width="612" height="430" rx="74" fill="url(#paper)"/>
+  </g>
+  <path d="M262 380 L512 586 L762 380" fill="none" stroke="url(#flap)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M276 690 L420 560 M748 690 L604 560" fill="none" stroke="#C9D3FF" stroke-width="30" stroke-linecap="round"/>
+  <!-- automation sparkle -->
+  <g filter="url(#soft)" transform="translate(770 290)">
+    <path d="M0 -150 C14 -62 62 -14 150 0 C62 14 14 62 0 150 C-14 62 -62 14 -150 0 C-62 -14 -14 -62 0 -150Z" fill="url(#spark)"/>
+    <path d="M0 -150 C14 -62 62 -14 150 0 C62 14 14 62 0 150 C-14 62 -62 14 -150 0 C-62 -14 -14 -62 0 -150Z" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="8"/>
+  </g>
+  <circle cx="660" cy="170" r="22" fill="#FFFFFF" fill-opacity="0.85"/>
+</svg>
