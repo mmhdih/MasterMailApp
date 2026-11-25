@@ -24,6 +24,7 @@ def _parse() -> argparse.Namespace:
     p.add_argument("--port", type=int, default=0)
     p.add_argument("--token", default=None)
     p.add_argument("--version", "-V", action="store_true")
+    p.add_argument("--self-check", action="store_true", help="verify the bundled app works, then exit")
     return p.parse_args()
 
 
@@ -47,6 +48,49 @@ def _app_mode_browser(url: str) -> subprocess.Popen | None:
     return None
 
 
+def _self_check() -> int:
+    """Import every runtime dependency and exercise the app end to end without a window."""
+    import importlib
+    import json
+    import tempfile
+    import urllib.request
+
+    results: dict[str, str] = {}
+    for mod in ("webview", "keyring", "selenium.webdriver", "docx", "anthropic", "openpyxl", "xlrd"):
+        try:
+            importlib.import_module(mod)
+            results[mod] = "ok"
+        except Exception as exc:  # noqa: BLE001
+            results[mod] = f"FAIL {exc}"
+    try:
+        from mastermail.paths import resource
+
+        for rel in ("web/index.html", "web/js/app.js", "web/css/app.css", "web/fonts/Vazirmatn-Regular.ttf", "web/img/icon.svg"):
+            results[rel] = "ok" if resource(*rel.split("/")).is_file() else "FAIL missing"
+        os.environ.setdefault("MASTERMAIL_DATA", tempfile.mkdtemp(prefix="mm-check-"))
+        os.environ.setdefault("MASTERMAIL_WORKSPACE", tempfile.mkdtemp(prefix="mm-ws-"))
+        from mastermail.server import AppServer
+        from mastermail.service import Service
+
+        server = AppServer(Service(), token="check").start()
+        base = f"http://127.0.0.1:{server.port}"
+        req = urllib.request.Request(base + "/api/state", headers={"X-Token": "check"})
+        state = json.loads(urllib.request.urlopen(req, timeout=10).read())
+        results["api"] = "ok" if state["app"]["name"] == "MasterMail" else "FAIL bad state"
+        page = urllib.request.urlopen(base + "/", timeout=10).read().decode("utf-8")
+        results["ui"] = "ok" if 'dir="rtl"' in page else "FAIL ui not served"
+        req = urllib.request.Request(base + "/api/campaigns", data=json.dumps({"name": "کمپین آزمایشی"}).encode(),
+                                     method="POST", headers={"X-Token": "check", "Content-Type": "application/json"})
+        results["database"] = "ok" if json.loads(urllib.request.urlopen(req, timeout=10).read())["name"] == "کمپین آزمایشی" else "FAIL"
+        server.stop()
+    except Exception as exc:  # noqa: BLE001
+        results["app"] = f"FAIL {exc}"
+    failed = {k: v for k, v in results.items() if v != "ok"}
+    print(json.dumps(results, ensure_ascii=True, indent=1))
+    print("SELF-CHECK " + ("FAILED" if failed else "PASSED"))
+    return 1 if failed else 0
+
+
 def main() -> int:
     args = _parse()
     from mastermail import APP_NAME, APP_NAME_FA, POWERED_BY, __version__
@@ -54,6 +98,9 @@ def main() -> int:
     if args.version:
         print(f"{APP_NAME} {__version__} — {POWERED_BY}")
         return 0
+
+    if args.self_check:
+        return _self_check()
 
     from mastermail.server import AppServer
     from mastermail.service import Service

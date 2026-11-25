@@ -47,11 +47,14 @@ jobs:
         run: python packaging/make_version_info.py
       - name: Build exe
         run: pyinstaller --noconfirm --clean MasterMail.spec
-      - name: Smoke test
+      - name: Self-check the built exe (libraries, UI files, local server, database)
         shell: pwsh
         run: |
-          $out = & dist\MasterMail.exe --version | Out-String
-          Write-Host $out
+          $env:MASTERMAIL_DATA = Join-Path $env:RUNNER_TEMP "mm-data"
+          $env:MASTERMAIL_WORKSPACE = Join-Path $env:RUNNER_TEMP "mm-ws"
+          $p = Start-Process -FilePath dist\MasterMail.exe -ArgumentList "--self-check" -NoNewWindow -Wait -PassThru -RedirectStandardOutput check.txt
+          Get-Content check.txt
+          if ($p.ExitCode -ne 0) { throw "self-check failed" }
       - name: Checksum
         shell: pwsh
         run: |
