@@ -62,6 +62,7 @@ def build_router(svc: Service) -> Router:
           lambda q, b, jid, action: {"ok": svc.jobs.control(jid, action)})
 
     r.add("POST", "/api/crawl", lambda q, b: svc.start_crawl(j(b)))
+    r.add("POST", "/api/crawl/plan", lambda q, b: svc.crawl_plan(j(b)))
     r.add("POST", "/api/split", lambda q, b: svc.start_split(j(b)))
 
     r.add("GET", "/api/sellers", lambda q, b: svc.sellers(q.get("q", ""), int(q.get("limit", 200)), int(q.get("offset", 0))))
@@ -80,6 +81,7 @@ def build_router(svc: Service) -> Router:
     r.add("POST", c + "/recipients/(?P<sid>[\\w\\-]+)", lambda q, b, cid, sid: svc.update_recipient(cid, sid, j(b)))
     r.add("POST", c + "/exclude", lambda q, b, cid: svc.bulk_exclude(cid, j(b)))
     r.add("POST", c + "/crawl", lambda q, b, cid: svc.crawl_campaign(cid, j(b)))
+    r.add("GET", c + "/crawl-plan", lambda q, b, cid: svc.campaign_crawl_plan(cid))
     r.add("POST", c + "/split", lambda q, b, cid: svc.prepare_split(cid, j(b)))
     r.add("POST", c + "/shared", lambda q, b, cid: svc.add_shared_attachment(cid, j(b).get("file_id", "")))
     r.add("DELETE", c + "/shared/(?P<fid>[0-9a-f]+)", lambda q, b, cid, fid: svc.remove_shared_attachment(cid, fid))

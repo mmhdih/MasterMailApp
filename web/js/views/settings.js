@@ -70,7 +70,7 @@ export function settingsView(page) {
       groupRow("سلکتور ایمیل", text("crawler.email_selector", s.crawler.email_selector, { ltr: true })),
       groupRow("سلکتور نام تجاری", text("crawler.name_selector", s.crawler.name_selector, { ltr: true })),
       groupRow("فاصله بین صفحه‌ها (ثانیه)", text("crawler.delay", s.crawler.delay, { type: "number", width: "90px", ltr: true })),
-      groupRow("اعتبار دفترچه (روز)", text("crawler.cache_days", s.crawler.cache_days, { type: "number", width: "90px", ltr: true }), { sub: "ایمیل‌هایی که جدیدتر از این باشند دوباره کراول نمی‌شوند." }),
+      groupRow("اعتبار دفترچه آدرس (روز)", text("crawler.cache_days", s.crawler.cache_days, { type: "number", width: "90px", ltr: true }), { sub: "در کراول هوشمند، ایمیل‌های قدیمی‌تر از این دوباره از پنل خوانده می‌شوند. صفر یعنی همیشه معتبر." }),
       groupRow("تلاش مجدد برای هر فروشنده", text("crawler.retries", s.crawler.retries, { type: "number", width: "90px", ltr: true })),
       groupRow("ذخیره نشست کروم (بدون ورود دوباره)", sw("crawler.keep_profile", s.crawler.keep_profile)),
       groupRow("اجرای مخفی مرورگر (Headless)", sw("crawler.headless", s.crawler.headless), { sub: "فقط وقتی نشست ذخیره‌شده معتبر است؛ برای ورود اول خاموش باشد." }),

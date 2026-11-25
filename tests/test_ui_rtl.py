@@ -337,3 +337,30 @@ def test_audit_catches_rtl_mistakes(browser, app):
     found = "\n".join(audit(page, "ltr"))
     assert "html dir is ltr" in found and "sidebar is not on the right" in found
     ctx.close()
+
+
+def test_crawl_modes_in_ui(browser, app):
+    """Smart crawl reads known sellers from the address book; full crawl re-reads everyone."""
+    ctx, page, errors = open_page(browser, app)
+    svc = app["svc"]
+    page.evaluate("location.hash = '#/crawler'")
+    page.wait_for_selector("textarea")
+    page.fill("textarea", "1001\n1003\n1002")         # all three were crawled when the fixture was built
+    page.wait_for_selector(".crawl-chooser")
+    chooser = page.locator(".crawl-chooser")
+    # 1001 and 1003 have emails in the book; 1002 had no email in the panel last time
+    text = chooser.inner_text()
+    assert "۲ در دفترچه آدرس" in text and "۱ بدون ایمیل در کراول قبلی" in text
+    start = chooser.locator("button.btn.primary")
+    assert "شروع کراول هوشمند (۱ فروشنده)" in start.inner_text()   # smart is the default
+    chooser.locator(".option-card").nth(1).click()
+    assert "شروع کراول کامل (۳ فروشنده)" in start.inner_text()
+    start.click()
+    page.wait_for_selector("text=باز کردن اکسل", timeout=20000)
+    job = next(j for j in svc.jobs.list() if j["kind"] == "crawl" and j["meta"].get("mode") == "full")
+    assert job["result"]["crawled"] == 3 and job["result"]["mode"] == "full"
+    assert page.locator("table.t tbody tr").count() == 3
+    problems = audit(page, "کراولر بعد از کراول کامل")
+    ctx.close()
+    assert not errors, errors
+    assert not problems, "\n".join(problems)

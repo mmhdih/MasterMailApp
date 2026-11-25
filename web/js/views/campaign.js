@@ -5,13 +5,14 @@ import {
   refreshState,
 } from "../core.js";
 import { jobCard, isFinished } from "../jobs.js";
+import { crawlChooser } from "../crawlplan.js";
 import { campaignRow, newCampaign } from "./home.js";
 
 const STEPS = [
   { t: "منبع", icon: "list" }, { t: "گیرندگان", icon: "people" }, { t: "متن ایمیل", icon: "wand" },
   { t: "پیوست", icon: "clip" }, { t: "بازبینی و ارسال", icon: "send" },
 ];
-const ORIGIN = { file: ["فایل", "indigo"], directory: ["دفترچه", "purple"], crawl: ["کراول", "blue"], manual: ["دستی", "orange"] };
+const ORIGIN = { file: ["فایل", "indigo"], directory: ["دفترچه آدرس", "purple"], crawl: ["کراول", "blue"], manual: ["دستی", "orange"] };
 const SEND_STATUS = { sent: ["ارسال شد", "green"], failed: ["ناموفق", "red"], skipped: ["رد شد", "orange"], dry: ["شبیه‌سازی", "blue"] };
 const FA_DIGITS = "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩";
 
@@ -243,6 +244,16 @@ export function campaignView(page, id) {
       return { total: r.length, active: active.length, withEmail: withEmail.length, missing: active.length - withEmail.length, excluded: r.length - active.length };
     };
 
+    const chooserSlot = h("div", { style: { marginTop: "16px" } });
+    const refreshPlan = async () => {
+      try {
+        const plan = await get(`/api/campaigns/${id}/crawl-plan`);
+        const k = counts();
+        mount(chooserSlot, crawlChooser(plan, {
+          title: k.missing ? `دریافت ایمیل ${num(k.missing)} فروشنده از پنل` : "به‌روزرسانی از پنل",
+          onStart: (mode) => startCrawl(mode) }));
+      } catch (e) { mount(chooserSlot); }
+    };
     const crawledAll = () => S.c.recipients.filter((x) => !x.excluded && !isEmail(x.email)).every((x) => x.crawl_status);
     function renderSummary() {
       const k = counts();
@@ -254,22 +265,18 @@ export function campaignView(page, id) {
         k.missing && !running && crawledAll() ? h("div", { class: "banner", style: { marginTop: "16px" } },
           h("div", { class: "b-ico" }, icon("warn", 18, 2)),
           h("div", { class: "txt" }, h("b", {}, `ایمیل ${num(k.missing)} فروشنده در پنل هم پیدا نشد`),
-            h("small", {}, "ایمیل را در جدول زیر دستی وارد کنید یا آن‌ها را از ارسال حذف کنید. ایمیل‌های واردشده در دفترچه هم ذخیره می‌شوند.")),
-          button("حذف از ارسال", { onClick: async () => { S.c = await post(`/api/campaigns/${id}/exclude`, { which: "no_email" }); renderSummary(); renderTable(); } }),
-          button("تلاش دوباره", { kind: "sm plain", icon: "refresh", onClick: () => startCrawl(false) })) : null,
-        k.missing && !running && !crawledAll() ? h("div", { class: "banner blue", style: { marginTop: "16px" } },
-          h("div", { class: "b-ico" }, icon("globe", 18, 2)),
-          h("div", { class: "txt" }, h("b", {}, `ایمیل ${num(k.missing)} فروشنده هنوز مشخص نیست`),
-            h("small", {}, "مستر میل صفحه هر فروشنده را در پنل ادمین باز می‌کند و ایمیل و نام تجاری را برمی‌دارد. ورود به پنل فقط بار اول لازم است.")),
-          button("دریافت خودکار از پنل", { kind: "primary", icon: "bolt", onClick: () => startCrawl(false) })) : null,
-        !k.missing && k.active ? h("div", { class: "banner green", style: { marginTop: "16px" } },
+            h("small", {}, "ایمیل را در جدول زیر دستی وارد کنید یا آن‌ها را از ارسال حذف کنید. ایمیل‌های واردشده در دفترچه آدرس هم ذخیره می‌شوند.")),
+          button("حذف از ارسال", { onClick: async () => { S.c = await post(`/api/campaigns/${id}/exclude`, { which: "no_email" }); renderSummary(); renderTable(); } })) : null,
+        !k.missing && k.active && !running ? h("div", { class: "banner green", style: { marginTop: "16px" } },
           h("div", { class: "b-ico" }, icon("check", 18, 2.4)),
           h("div", { class: "txt" }, h("b", {}, "همه گیرندگان ایمیل دارند"), h("small", {}, "می‌توانید به مرحله نوشتن متن ایمیل بروید.")),
-          button("بروزرسانی از پنل", { kind: "sm", icon: "refresh", onClick: () => startCrawl(true) })) : null);
+          button("ادامه", { kind: "primary", icon: "chevron", iconEnd: true, onClick: () => goStep(2), busy: false })) : null,
+        k.active && !running ? chooserSlot : null);
+      if (k.active && !running) refreshPlan();
     }
 
-    async function startCrawl(refresh) {
-      const job = await post(`/api/campaigns/${id}/crawl`, { refresh });
+    async function startCrawl(mode) {
+      const job = await post(`/api/campaigns/${id}/crawl`, { mode });
       showJob(job);
     }
     function showJob(job) {
